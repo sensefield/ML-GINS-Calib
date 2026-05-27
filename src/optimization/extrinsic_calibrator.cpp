@@ -112,6 +112,10 @@ void calib::ExtrinsicCalibrator::AddGicpFactors(
 void calib::ExtrinsicCalibrator::UpdateCorrespondences(
     const CorrPreData &corr_pre_data, std::vector<int> &correspondences,
     Mat4dVec &opt_cov) {
+  if (!corr_pre_data.target_cloud_ || !corr_pre_data.source_cloud_) {
+    return;
+  }
+
   Eigen::Isometry3f source_trans_f = corr_pre_data.source_trans_.cast<float>();
 
   CloudPtr target_cloud(new PointCloudType);
@@ -197,12 +201,16 @@ Eigen::Isometry3d calib::ExtrinsicCalibrator::LgOptimizationCoarse(
       }
     }
 
+    if (filtered_cloud->empty()) {
+      return false;
+    }
+
     pcl::ApproximateVoxelGrid<PointType> avg;
     avg.setLeafSize(voxel_size_, voxel_size_, voxel_size_);
     avg.setInputCloud(filtered_cloud);
     avg.filter(*cloud);
 
-    return true;
+    return !cloud->empty();
   };
 
   size_t size = paths.size();
@@ -227,7 +235,9 @@ Eigen::Isometry3d calib::ExtrinsicCalibrator::LgOptimizationCoarse(
     }
   }
 
-  if (clouds.size() < 2) {
+  int valid_cloud_count = 0;
+  for (const auto &c : clouds) if (c) ++valid_cloud_count;
+  if (valid_cloud_count < 2) {
     std::cerr << "At least 2 valid point clouds are required." << std::endl;
     return Eigen::Isometry3d::Identity();
   }
@@ -252,7 +262,9 @@ Eigen::Isometry3d calib::ExtrinsicCalibrator::LgOptimizationCoarse(
 
   std::vector<ExtrinsicCalibrator::CorrPreData> corr_pre_datas;
   for (size_t i = 0; i < size; ++i) {
+    if (!clouds[i]) continue;
     for (size_t j = i + 1; j < size; ++j) {
+      if (!clouds[j]) continue;
       ExtrinsicCalibrator::CorrPreData corr_pre_data;
       corr_pre_data.source_cloud_ = clouds[i];
       corr_pre_data.target_cloud_ = clouds[j];
@@ -307,16 +319,24 @@ void calib::ExtrinsicCalibrator::UpdateCorrespondences(
   Eigen::Isometry3f T_ext_f = T_ext.cast<float>();
   Eigen::Isometry3f source_trans_f = corr_pre_data.source_trans_.cast<float>();
 
+  if (!corr_pre_data.target_cloud_ || !corr_pre_data.source_cloud_) {
+    return;
+  }
+
   CloudPtr target_cloud(new PointCloudType);
   pcl::transformPointCloud(*corr_pre_data.target_cloud_, *target_cloud,
                            (corr_pre_data.target_trans_ * T_ext).matrix());
 
+  correspondences.resize(corr_pre_data.source_cloud_->size(), -1);
+  opt_cov.resize(corr_pre_data.source_cloud_->size());
+
+  if (target_cloud->empty() || corr_pre_data.source_cloud_->empty()) {
+    return;
+  }
+
   nanoflann::KdTreeFLANN<PointType>::Ptr target_kdtree(
       new nanoflann::KdTreeFLANN<PointType>);
   target_kdtree->setInputCloud(target_cloud);
-
-  correspondences.resize(corr_pre_data.source_cloud_->size());
-  opt_cov.resize(corr_pre_data.source_cloud_->size());
 
   std::vector<int> k_indices(1);
   std::vector<float> k_sq_dists(1);
@@ -548,12 +568,16 @@ Eigen::Isometry3d calib::ExtrinsicCalibrator::LgOptimizationRefine(
       }
     }
 
+    if (filtered_cloud->empty()) {
+      return false;
+    }
+
     pcl::ApproximateVoxelGrid<PointType> avg;
     avg.setLeafSize(voxel_size_, voxel_size_, voxel_size_);
     avg.setInputCloud(filtered_cloud);
     avg.filter(*cloud);
 
-    return true;
+    return !cloud->empty();
   };
 
   size_t size = paths.size();
@@ -578,7 +602,9 @@ Eigen::Isometry3d calib::ExtrinsicCalibrator::LgOptimizationRefine(
     }
   }
 
-  if (clouds.size() < 2) {
+  int valid_cloud_count = 0;
+  for (const auto &c : clouds) if (c) ++valid_cloud_count;
+  if (valid_cloud_count < 2) {
     std::cerr << "At least 2 valid point clouds are required." << std::endl;
     return Eigen::Isometry3d::Identity();
   }
@@ -586,7 +612,9 @@ Eigen::Isometry3d calib::ExtrinsicCalibrator::LgOptimizationRefine(
   std::vector<std::pair<int, int>> index_pairs;
   std::vector<ExtrinsicCalibrator::CorrPreData> corr_pre_datas;
   for (size_t i = 0; i < size; ++i) {
+    if (!clouds[i]) continue;
     for (size_t j = i + 1; j < size; ++j) {
+      if (!clouds[j]) continue;
       index_pairs.emplace_back(i, j);
 
       ExtrinsicCalibrator::CorrPreData corr_pre_data;
@@ -693,14 +721,16 @@ void calib::ExtrinsicCalibrator::JointOptimization(
       }
     }
 
+    if (filtered_cloud->empty()) {
+      return false;
+    }
+
     pcl::ApproximateVoxelGrid<PointType> avg;
     avg.setLeafSize(voxel_size_, voxel_size_, voxel_size_);
     avg.setInputCloud(filtered_cloud);
     avg.filter(*cloud);
 
-
-
-    return true;
+    return !cloud->empty();
   };
 
   size_t row_size = cloud_paths.size();
@@ -1307,6 +1337,10 @@ void calib::ExtrinsicCalibrator::UpdateCorrespondences(
     std::vector<std::pair<int, GaussianVoxel::Ptr>> &voxel_correspondences,
     Mat4dVec &opt_cov) {
   voxel_correspondences.clear();
+  if (!corr_pre_data.target_cloud_ || !corr_pre_data.source_cloud_) {
+    return;
+  }
+
   auto offsets = neighbor_offsets(search_method_);
 
   std::vector<std::vector<std::pair<int, GaussianVoxel::Ptr>>> corrs(
