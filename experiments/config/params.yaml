@@ -1,0 +1,111 @@
+# =============================================================================
+# ML-GINS-Calib  --  calibration run configuration (example)
+#
+# Usage:
+#   1. set data_dir / init_ext to match your dataset
+#   2. cp experiments/config/params.yaml config/params.yaml
+#   3. ./build/bin/ml_gins_calibrator        # run from the repository root
+#
+# Key choices:
+#   - lidar_list                  : top / front / back
+#   - init_ext                    : initial extrinsics (T_imu_lidar) per LiDAR
+#   - keyframe_selection          : translation_threshold / rotation_threshold
+#   - max_correspondence_distance : 0.5 for both stages
+# =============================================================================
+
+# Directory holding the converted input (set to your data directory)
+data_dir: data
+gnss/ins: gins_sync
+# data_mask_path must be present as a key, but the file itself is not loaded by
+# the current code (the mask vector is never populated). Any string is accepted.
+data_mask_path: data_mask.txt
+
+gins_installation_height: 0.0
+
+# Algorithm parameter configuration
+optimization_params:
+  # Number of threads for optimizer
+  num_threads: 4
+
+  # First stage optimization (LiDAR-GNSS/INS)
+  lidar_gins_optimization:
+    max_iterations: 20
+    max_correspondence_distance: 0.5
+
+  # Second stage optimization (Multi-LiDAR)
+  multi_lidar_optimization:
+    max_iterations: 50
+    max_correspondence_distance: 0.5
+
+  # Keyframe selection parameters
+  keyframe_selection:
+    # Rotation threshold (radians)
+    rotation_threshold: 0.3
+    # Translation threshold (meters) -- larger value = fewer keyframes
+    translation_threshold: 10.0
+
+  # Output format parameters
+  output:
+    time_precision: 3
+    time_scale_factor: 1000.0
+    # Top-relative extrinsics (T_top^-1 * T_base_lidar), one xyzq row per LiDAR
+    extrinsic_output_file: "experiments/output/extrinsic_parameters.txt"
+    # Set to true to also dump before/after/aligned PCD maps for qualitative checks
+    save_maps: false
+    map_output_directory: "./experiments/output/maps/"
+
+  # Point cloud processing parameters
+  point_cloud:
+    voxel_size: 0.2
+    downsample_leaf_size: 0.1
+    ground_distance_threshold: 0.1
+
+  # Correspondence parameters
+  correspondence:
+    distance_threshold: 1.0
+
+  # Noise model parameters
+  noise_model:
+    huber_parameter: 0.1
+    rotation_std: 0.01
+    translation_std: 0.01
+
+lidar_list:
+  - top
+  - front
+  - back
+
+# T_imu_lidar  (imu frame == base_link)
+# Initial extrinsics per LiDAR. Set these to your sensor layout
+# (e.g. derived from /tf_static: base_link -> sensor_kit_base_link -> <lidar>).
+init_ext:
+  top:
+    position:
+      x: 6.103000
+      y: -1.568000
+      z: 4.500000
+    orientation:
+      w: 0.70784789
+      x: 0.00000000
+      y: 0.00000000
+      z: 0.70636489
+  front:
+    position:
+      x: 6.697034
+      y: 0.000965
+      z: 1.234126
+    orientation:
+      w: 0.99974430
+      x: -0.01845501
+      y: 0.00025100
+      z: -0.01306500
+  back:
+    position:
+      x: -0.838112
+      y: 0.152024
+      z: 1.207076
+    orientation:
+      w: 0.02174201
+      x: -0.00974400
+      y: 0.01188501
+      z: 0.99964548
